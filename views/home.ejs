@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Project Manager</title>
+    <style>
+        body { font-family: Arial; max-width: 800px; margin: 0 auto; padding: 20px; }
+        .form-group { margin-bottom: 15px; }
+        input { padding: 8px; width: 100%; }
+        button { padding: 10px 20px; background: #007bff; color: white; border: none; cursor: pointer; margin-right: 10px; }
+        .error { color: red; margin-top: 10px; }
+        .search-section { margin-top: 30px; border-top: 1px solid #ddd; padding-top: 20px; }
+    </style>
+</head>
+<body>
+    <h1>Project Manager</h1>
+    
+    <div class="search-section">
+        <h2>Find Project</h2>
+        <form action="/find-project" method="GET">
+            <div class="form-group">
+                <label>Project Name:</label>
+                <input type="text" name="projectName" required>
+            </div>
+            <button type="submit">Find Project</button>
+        </form>
+    </div>
+
+    <div class="search-section">
+        <h2>Create New Project</h2>
+        <form action="/create-project" method="POST">
+            <div class="form-group">
+                <label>Project Name:</label>
+                <input type="text" name="projectName" required>
+            </div>
+            <div class="form-group">
+                <label>Password:</label>
+                <input type="password" name="password" required>
+            </div>
+            <button type="submit">Create Project</button>
+        </form>
+        <% if (locals.error) { %>
+            <div class="error"><%= error %></div>
+        <% } %>
+    </div>
+</body>
+</html>
