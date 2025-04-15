@@ -9,18 +9,45 @@ app.use(bodyParser.json());
 
 // Telegram Bot configuration
 const BOT_TOKEN = '7742484652:AAEUJBUh0BM93n_IfPY1VcCXq27TL9HUMBc';
-const bot = new TelegramBot(BOT_TOKEN, { polling: true });
+const bot = new TelegramBot(BOT_TOKEN, {
+    polling: {
+        interval: 300,
+        autoStart: true,
+        params: {
+            timeout: 10
+        }
+    },
+    filepath: false
+});
 
-let chatId = null;
-let messageId = null;
+// Add error handling for polling
+bot.on('polling_error', (error) => {
+    console.log('Polling error:', error.message);
+    // Restart polling after error
+    bot.stopPolling().then(() => {
+        setTimeout(() => {
+            bot.startPolling();
+        }, 5000);
+    });
+});
+
+// Store the last known state
+let chatId = process.env.CHAT_ID || null;
+let messageId = process.env.MESSAGE_ID || null;
 
 // Initialize bot and create storage
 bot.onText(/\/start/, async (msg) => {
-    chatId = msg.chat.id;
-    const initialMessage = await bot.sendMessage(chatId, '[]');
-    messageId = initialMessage.message_id;
-    await bot.pinChatMessage(chatId, messageId);
-    console.log(`Storage initialized. Chat ID: ${chatId}, Message ID: ${messageId}`);
+    try {
+        if (!chatId || !messageId) {
+            chatId = msg.chat.id;
+            const initialMessage = await bot.sendMessage(chatId, '[]');
+            messageId = initialMessage.message_id;
+            await bot.pinChatMessage(chatId, messageId);
+            console.log(`Storage initialized. Chat ID: ${chatId}, Message ID: ${messageId}`);
+        }
+    } catch (error) {
+        console.error('Error initializing storage:', error);
+    }
 });
 
 // Function to read data
