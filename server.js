@@ -27,8 +27,12 @@ bot.onText(/\/start/, async (msg) => {
 async function readProjectsData() {
     try {
         if (!chatId || !messageId) return [];
-        const message = await bot.getMessage(chatId, messageId);
-        return JSON.parse(message.text || '[]');
+        const chat = await bot.getChat(chatId);
+        const pinnedMessage = chat.pinned_message;
+        if (pinnedMessage && pinnedMessage.message_id === messageId) {
+            return JSON.parse(pinnedMessage.text || '[]');
+        }
+        return [];
     } catch (error) {
         console.error('Error reading data:', error);
         return [];
@@ -39,13 +43,24 @@ async function readProjectsData() {
 async function writeProjectsData(data) {
     try {
         if (!chatId || !messageId) return;
-        const jsonData = JSON.stringify(data, null, 2);
+        const jsonData = JSON.stringify(data);
         await bot.editMessageText(jsonData, {
             chat_id: chatId,
-            message_id: messageId
+            message_id: messageId,
+            parse_mode: 'HTML'
         });
     } catch (error) {
         console.error('Error writing data:', error);
+        // If message is too long, split it into multiple messages
+        if (error.response && error.response.statusCode === 400) {
+            const chunks = jsonData.match(/.{1,4000}/g);
+            if (chunks) {
+                await bot.deleteMessage(chatId, messageId);
+                const newMessage = await bot.sendMessage(chatId, chunks[0]);
+                messageId = newMessage.message_id;
+                await bot.pinChatMessage(chatId, messageId);
+            }
+        }
     }
 }
 
