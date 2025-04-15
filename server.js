@@ -1,49 +1,48 @@
 const express = require('express');
 const bodyParser = require('body-parser');
-const axios = require('axios');
+const TelegramBot = require('node-telegram-bot-api');
 const app = express();
 
 app.set('view engine', 'ejs');
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
 
-// Replace with your Google Drive file ID and sharing link
-const DRIVE_FILE_ID = '1rWYfiOKP8Un2Iq21xV1htblxfr9ZDwzZ';
-const DRIVE_FILE_URL = `https://drive.google.com/uc?export=download&id=${DRIVE_FILE_ID}`;
+// Telegram Bot configuration
+const BOT_TOKEN = '7742484652:AAEUJBUh0BM93n_IfPY1VcCXq27TL9HUMBc';
+const bot = new TelegramBot(BOT_TOKEN, { polling: true });
 
-// Function to read data from Google Drive
+let chatId = null;
+let messageId = null;
+
+// Initialize bot and create storage
+bot.onText(/\/start/, async (msg) => {
+    chatId = msg.chat.id;
+    const initialMessage = await bot.sendMessage(chatId, '[]');
+    messageId = initialMessage.message_id;
+    await bot.pinChatMessage(chatId, messageId);
+    console.log(`Storage initialized. Chat ID: ${chatId}, Message ID: ${messageId}`);
+});
+
+// Function to read data
 async function readProjectsData() {
     try {
-        const response = await axios.get(DRIVE_FILE_URL);
-        // Ensure we always return an array
-        if (Array.isArray(response.data)) {
-            return response.data;
-        }
-        // If data exists but isn't an array, try to parse it
-        if (response.data) {
-            try {
-                const parsed = JSON.parse(response.data);
-                return Array.isArray(parsed) ? parsed : [];
-            } catch (e) {
-                return [];
-            }
-        }
-        return [];
+        if (!chatId || !messageId) return [];
+        const message = await bot.getMessage(chatId, messageId);
+        return JSON.parse(message.text || '[]');
     } catch (error) {
         console.error('Error reading data:', error);
         return [];
     }
 }
 
-// Function to write data to Google Drive
+// Function to write data
 async function writeProjectsData(data) {
     try {
-        // Ensure we're sending JSON string
-        const jsonData = JSON.stringify(data);
-        await axios.put(DRIVE_FILE_URL, jsonData, {
-            headers: {
-                'Content-Type': 'application/json'
-            }
+        if (!chatId || !messageId) return;
+        const jsonData = JSON.stringify(data, null, 2);
+        await bot.editMessageText(jsonData, {
+            chat_id: chatId,
+            message_id: messageId
         });
     } catch (error) {
         console.error('Error writing data:', error);
@@ -139,4 +138,5 @@ app.put('/api/project/:name', async (req, res) => {
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, '0.0.0.0', () => {
     console.log(`Server running on port ${PORT}`);
+    console.log('Start the bot by sending /start in Telegram');
 });
