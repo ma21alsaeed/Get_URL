@@ -1,84 +1,20 @@
 const express = require('express');
 const bodyParser = require('body-parser');
-const TelegramBot = require('node-telegram-bot-api');
+const fs = require('fs').promises;
+const path = require('path');
 const app = express();
 
 app.set('view engine', 'ejs');
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
 
-// Telegram Bot configuration
-const BOT_TOKEN = '7742484652:AAEUJBUh0BM93n_IfPY1VcCXq27TL9HUMBc';
-const url = 'https://get-ip.onrender.com'; // Update with your actual Render URL
-const bot = new TelegramBot(BOT_TOKEN, { webHook: false }); // Start without webhook
-
-// Initialize webhook after server starts
-async function initializeWebhook() {
-    try {
-        // Delete any existing webhooks
-        await bot.deleteWebHook();
-        // Set new webhook
-        const result = await bot.setWebHook(`${url}/bot${BOT_TOKEN}`);
-        if (result) {
-            console.log('Webhook set successfully');
-        } else {
-            console.error('Failed to set webhook');
-            // Fallback to polling if webhook fails
-            bot.startPolling();
-        }
-    } catch (error) {
-        console.error('Webhook initialization error:', error);
-        // Fallback to polling
-        bot.startPolling();
-    }
-}
-
-// Webhook endpoint with proper path
-app.post(`/bot${BOT_TOKEN}`, (req, res) => {
-    try {
-        bot.processUpdate(req.body);
-        res.sendStatus(200);
-    } catch (error) {
-        console.error('Webhook processing error:', error);
-        res.sendStatus(500);
-    }
-});
-
-// Store the last known state
-let chatId = process.env.CHAT_ID || null;
-let messageId = process.env.MESSAGE_ID || null;
-
-// Webhook endpoint
-app.post(`/webhook/${BOT_TOKEN}`, (req, res) => {
-    bot.processUpdate(req.body);
-    res.sendStatus(200);
-});
-
-// Initialize bot and create storage
-bot.onText(/\/start/, async (msg) => {
-    try {
-        if (!chatId || !messageId) {
-            chatId = msg.chat.id;
-            const initialMessage = await bot.sendMessage(chatId, '[]');
-            messageId = initialMessage.message_id;
-            await bot.pinChatMessage(chatId, messageId);
-            console.log(`Storage initialized. Chat ID: ${chatId}, Message ID: ${messageId}`);
-        }
-    } catch (error) {
-        console.error('Error initializing storage:', error);
-    }
-});
+const PROJECTS_FILE = path.join(__dirname, 'projects.json');
 
 // Function to read data
 async function readProjectsData() {
     try {
-        if (!chatId || !messageId) return [];
-        const chat = await bot.getChat(chatId);
-        const pinnedMessage = chat.pinned_message;
-        if (pinnedMessage && pinnedMessage.message_id === messageId) {
-            return JSON.parse(pinnedMessage.text || '[]');
-        }
-        return [];
+        const data = await fs.readFile(PROJECTS_FILE, 'utf8');
+        return JSON.parse(data || '[]');
     } catch (error) {
         console.error('Error reading data:', error);
         return [];
@@ -88,25 +24,9 @@ async function readProjectsData() {
 // Function to write data
 async function writeProjectsData(data) {
     try {
-        if (!chatId || !messageId) return;
-        const jsonData = JSON.stringify(data);
-        await bot.editMessageText(jsonData, {
-            chat_id: chatId,
-            message_id: messageId,
-            parse_mode: 'HTML'
-        });
+        await fs.writeFile(PROJECTS_FILE, JSON.stringify(data, null, 2));
     } catch (error) {
         console.error('Error writing data:', error);
-        // If message is too long, split it into multiple messages
-        if (error.response && error.response.statusCode === 400) {
-            const chunks = jsonData.match(/.{1,4000}/g);
-            if (chunks) {
-                await bot.deleteMessage(chatId, messageId);
-                const newMessage = await bot.sendMessage(chatId, chunks[0]);
-                messageId = newMessage.message_id;
-                await bot.pinChatMessage(chatId, messageId);
-            }
-        }
     }
 }
 
@@ -199,6 +119,4 @@ app.put('/api/project/:name', async (req, res) => {
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, '0.0.0.0', () => {
     console.log(`Server running on port ${PORT}`);
-    initializeWebhook().catch(console.error);
-    console.log('Start the bot by sending /start in Telegram');
 });
