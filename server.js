@@ -9,31 +9,21 @@ app.use(bodyParser.json());
 
 // Telegram Bot configuration
 const BOT_TOKEN = '7742484652:AAEUJBUh0BM93n_IfPY1VcCXq27TL9HUMBc';
-const bot = new TelegramBot(BOT_TOKEN, {
-    polling: {
-        interval: 300,
-        autoStart: true,
-        params: {
-            timeout: 10
-        }
-    },
-    filepath: false
-});
+const url = 'https://get-url.onrender.com'; // Replace with your Render URL
+const bot = new TelegramBot(BOT_TOKEN, { webHook: { port: process.env.PORT || 3000 } });
 
-// Add error handling for polling
-bot.on('polling_error', (error) => {
-    console.log('Polling error:', error.message);
-    // Restart polling after error
-    bot.stopPolling().then(() => {
-        setTimeout(() => {
-            bot.startPolling();
-        }, 5000);
-    });
-});
+// Set webhook
+bot.setWebHook(`${url}/webhook/${BOT_TOKEN}`);
 
 // Store the last known state
 let chatId = process.env.CHAT_ID || null;
 let messageId = process.env.MESSAGE_ID || null;
+
+// Webhook endpoint
+app.post(`/webhook/${BOT_TOKEN}`, (req, res) => {
+    bot.processUpdate(req.body);
+    res.sendStatus(200);
+});
 
 // Initialize bot and create storage
 bot.onText(/\/start/, async (msg) => {
