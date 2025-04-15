@@ -1,47 +1,46 @@
 const express = require('express');
 const bodyParser = require('body-parser');
-const fs = require('fs');
-const path = require('path');
+const axios = require('axios');
 const app = express();
 
 app.set('view engine', 'ejs');
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
 
-// Store projects in JSON file
-const projectsFile = path.join(__dirname, 'projects.json');
+// Replace with your Google Drive file ID and sharing link
+const DRIVE_FILE_ID = 'YOUR_FILE_ID';
+const DRIVE_FILE_URL = 'YOUR_PUBLIC_FILE_URL';
 
-// Initialize projects file if it doesn't exist
-if (!fs.existsSync(projectsFile)) {
-    fs.writeFileSync(projectsFile, '[]');
+// Function to read data from Google Drive
+async function readProjectsData() {
+    try {
+        const response = await axios.get(DRIVE_FILE_URL);
+        return response.data || [];
+    } catch (error) {
+        console.error('Error reading data:', error);
+        return [];
+    }
+}
+
+// Function to write data to Google Drive
+async function writeProjectsData(data) {
+    try {
+        await axios.put(DRIVE_FILE_URL, data);
+    } catch (error) {
+        console.error('Error writing data:', error);
+    }
 }
 
 app.get('/', (req, res) => {
     res.render('home', { error: null });
 });
 
-app.get('/find-project', (req, res) => {
-    const projectName = req.query.projectName;
-    if (!projectName) {
-        return res.render('error', { message: 'Project name is required' });
-    }
-
-    const projects = JSON.parse(fs.readFileSync(projectsFile));
-    const project = projects.find(p => p.name.toLowerCase() === projectName.toLowerCase());
-
-    if (project) {
-        res.render('project', { projects: [project] });
-    } else {
-        res.render('not-found');
-    }
-});
-
-app.post('/create-project', (req, res) => {
+app.post('/create-project', async (req, res) => {
     if (req.body.password !== 'anchorlearner') {
         return res.render('home', { error: 'Incorrect password' });
     }
 
-    const projects = JSON.parse(fs.readFileSync(projectsFile));
+    const projects = await readProjectsData();
     const newProject = {
         id: Date.now(),
         name: req.body.projectName,
@@ -50,24 +49,24 @@ app.post('/create-project', (req, res) => {
         codeSample: req.body.codeSample || ''
     };
     projects.push(newProject);
-    fs.writeFileSync(projectsFile, JSON.stringify(projects, null, 2));
+    await writeProjectsData(projects);
     res.redirect('/project');
 });
 
-app.get('/project', (req, res) => {
-    const projects = JSON.parse(fs.readFileSync(projectsFile));
+app.get('/project', async (req, res) => {
+    const projects = await readProjectsData();
     res.render('project', { projects });
 });
 
-app.post('/delete-project/:id', (req, res) => {
-    let projects = JSON.parse(fs.readFileSync(projectsFile));
+app.post('/delete-project/:id', async (req, res) => {
+    let projects = await readProjectsData();
     projects = projects.filter(p => p.id !== parseInt(req.params.id));
-    fs.writeFileSync(projectsFile, JSON.stringify(projects, null, 2));
+    await writeProjectsData(projects);
     res.redirect('/project');
 });
 
-app.post('/update-project/:id', (req, res) => {
-    let projects = JSON.parse(fs.readFileSync(projectsFile));
+app.post('/update-project/:id', async (req, res) => {
+    let projects = await readProjectsData();
     const index = projects.findIndex(p => p.id === parseInt(req.params.id));
     if (index !== -1) {
         projects[index] = {
@@ -76,16 +75,14 @@ app.post('/update-project/:id', (req, res) => {
             port: req.body.port,
             codeSample: req.body.codeSample
         };
-        fs.writeFileSync(projectsFile, JSON.stringify(projects, null, 2));
+        await writeProjectsData(projects);
     }
     res.redirect('/project');
 });
 
-// Add new API endpoint
-app.get('/api/project/:name', (req, res) => {
-    const projectName = req.params.name;
-    const projects = JSON.parse(fs.readFileSync(projectsFile));
-    const project = projects.find(p => p.name.toLowerCase() === projectName.toLowerCase());
+app.get('/api/project/:name', async (req, res) => {
+    const projects = await readProjectsData();
+    const project = projects.find(p => p.name.toLowerCase() === req.params.name.toLowerCase());
     
     if (project) {
         res.json({
@@ -98,13 +95,10 @@ app.get('/api/project/:name', (req, res) => {
     }
 });
 
-// Add PUT endpoint to update project IP and port by name
-app.put('/api/project/:name', (req, res) => {
-    const projectName = req.params.name;
+app.put('/api/project/:name', async (req, res) => {
     const { ip, port } = req.body;
-    
-    let projects = JSON.parse(fs.readFileSync(projectsFile));
-    const index = projects.findIndex(p => p.name.toLowerCase() === projectName.toLowerCase());
+    let projects = await readProjectsData();
+    const index = projects.findIndex(p => p.name.toLowerCase() === req.params.name.toLowerCase());
     
     if (index !== -1) {
         projects[index] = {
@@ -112,7 +106,7 @@ app.put('/api/project/:name', (req, res) => {
             ip: ip || projects[index].ip,
             port: port || projects[index].port
         };
-        fs.writeFileSync(projectsFile, JSON.stringify(projects, null, 2));
+        await writeProjectsData(projects);
         res.json({
             name: projects[index].name,
             ip: projects[index].ip,
@@ -123,7 +117,6 @@ app.put('/api/project/:name', (req, res) => {
     }
 });
 
-// Update the port configuration for Render deployment
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, '0.0.0.0', () => {
     console.log(`Server running on port ${PORT}`);
