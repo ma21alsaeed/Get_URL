@@ -8,14 +8,27 @@ app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
 
 // Replace with your Google Drive file ID and sharing link
-const DRIVE_FILE_ID = 'YOUR_FILE_ID';
-const DRIVE_FILE_URL = 'https://drive.google.com/file/d/1rWYfiOKP8Un2Iq21xV1htblxfr9ZDwzZ/view?usp=sharing';
+const DRIVE_FILE_ID = '1rWYfiOKP8Un2Iq21xV1htblxfr9ZDwzZ';
+const DRIVE_FILE_URL = `https://drive.google.com/uc?export=download&id=${DRIVE_FILE_ID}`;
 
 // Function to read data from Google Drive
 async function readProjectsData() {
     try {
         const response = await axios.get(DRIVE_FILE_URL);
-        return response.data || [];
+        // Ensure we always return an array
+        if (Array.isArray(response.data)) {
+            return response.data;
+        }
+        // If data exists but isn't an array, try to parse it
+        if (response.data) {
+            try {
+                const parsed = JSON.parse(response.data);
+                return Array.isArray(parsed) ? parsed : [];
+            } catch (e) {
+                return [];
+            }
+        }
+        return [];
     } catch (error) {
         console.error('Error reading data:', error);
         return [];
@@ -25,7 +38,13 @@ async function readProjectsData() {
 // Function to write data to Google Drive
 async function writeProjectsData(data) {
     try {
-        await axios.put(DRIVE_FILE_URL, data);
+        // Ensure we're sending JSON string
+        const jsonData = JSON.stringify(data);
+        await axios.put(DRIVE_FILE_URL, jsonData, {
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
     } catch (error) {
         console.error('Error writing data:', error);
     }
