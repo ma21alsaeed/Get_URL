@@ -9,7 +9,7 @@ app.use(bodyParser.json());
 
 // Replace with your Google Drive file ID and sharing link
 const DRIVE_FILE_ID = 'YOUR_FILE_ID';
-const DRIVE_FILE_URL = 'YOUR_PUBLIC_FILE_URL';
+const DRIVE_FILE_URL = 'https://drive.google.com/file/d/1rWYfiOKP8Un2Iq21xV1htblxfr9ZDwzZ/view?usp=sharing';
 
 // Function to read data from Google Drive
 async function readProjectsData() {
