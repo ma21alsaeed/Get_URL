@@ -9,11 +9,40 @@ app.use(bodyParser.json());
 
 // Telegram Bot configuration
 const BOT_TOKEN = '7742484652:AAEUJBUh0BM93n_IfPY1VcCXq27TL9HUMBc';
-const url = 'https://get-url.onrender.com'; // Replace with your Render URL
-const bot = new TelegramBot(BOT_TOKEN, { webHook: { port: process.env.PORT || 3000 } });
+const url = 'https://get-ip.onrender.com'; // Update with your actual Render URL
+const bot = new TelegramBot(BOT_TOKEN, { webHook: false }); // Start without webhook
 
-// Set webhook
-bot.setWebHook(`${url}/webhook/${BOT_TOKEN}`);
+// Initialize webhook after server starts
+async function initializeWebhook() {
+    try {
+        // Delete any existing webhooks
+        await bot.deleteWebHook();
+        // Set new webhook
+        const result = await bot.setWebHook(`${url}/bot${BOT_TOKEN}`);
+        if (result) {
+            console.log('Webhook set successfully');
+        } else {
+            console.error('Failed to set webhook');
+            // Fallback to polling if webhook fails
+            bot.startPolling();
+        }
+    } catch (error) {
+        console.error('Webhook initialization error:', error);
+        // Fallback to polling
+        bot.startPolling();
+    }
+}
+
+// Webhook endpoint with proper path
+app.post(`/bot${BOT_TOKEN}`, (req, res) => {
+    try {
+        bot.processUpdate(req.body);
+        res.sendStatus(200);
+    } catch (error) {
+        console.error('Webhook processing error:', error);
+        res.sendStatus(500);
+    }
+});
 
 // Store the last known state
 let chatId = process.env.CHAT_ID || null;
@@ -170,5 +199,6 @@ app.put('/api/project/:name', async (req, res) => {
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, '0.0.0.0', () => {
     console.log(`Server running on port ${PORT}`);
+    initializeWebhook().catch(console.error);
     console.log('Start the bot by sending /start in Telegram');
 });
