@@ -156,6 +156,10 @@ app.get('/api/project/:name', async (req, res) => {
         res.status(404).json({ error: 'Project not found' });
     }
 });
+app.post('/debug', (req, res) => {
+    console.log('BODY:', req.body);
+    res.sendStatus(200);
+});
 
 app.put('/api/project/:name', async (req, res) => {
     const { ip, port } = req.body;
