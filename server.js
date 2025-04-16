@@ -2,15 +2,20 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const fs = require('fs').promises;
 const path = require('path');
-const app = express();
+const axios = require('axios');
 
+const app = express();
 app.set('view engine', 'ejs');
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
 
+const TELEGRAM_TOKEN = '7742484652:AAEUJBUh0BM93n_IfPY1VcCXq27TL9HUMBc';
+const TELEGRAM_API = `https://api.telegram.org/bot${TELEGRAM_TOKEN}`;
+const WEBHOOK_URL = 'https://get-url-o0dy.onrender.com/bot';
+
 const PROJECTS_FILE = path.join(__dirname, 'projects.json');
 
-// Function to read data
+// Read data
 async function readProjectsData() {
     try {
         const data = await fs.readFile(PROJECTS_FILE, 'utf8');
@@ -21,7 +26,7 @@ async function readProjectsData() {
     }
 }
 
-// Function to write data
+// Write data
 async function writeProjectsData(data) {
     try {
         await fs.writeFile(PROJECTS_FILE, JSON.stringify(data, null, 2));
@@ -30,9 +35,68 @@ async function writeProjectsData(data) {
     }
 }
 
-app.get('/', (req, res) => {
-    res.render('home', { error: null });
+// Telegram helper to send messages
+async function sendMessage(chatId, text, markdown = false) {
+    try {
+        await axios.post(`${TELEGRAM_API}/sendMessage`, {
+            chat_id: chatId,
+            text,
+            parse_mode: markdown ? 'Markdown' : undefined
+        });
+    } catch (err) {
+        console.error('Telegram sendMessage error:', err.message);
+    }
+}
+
+// Telegram webhook handler
+app.post('/bot', async (req, res) => {
+    const message = req.body.message;
+    if (!message || !message.text) return res.sendStatus(200);
+
+    const chatId = message.chat.id;
+    const text = message.text.trim();
+
+    if (text.startsWith('/add')) {
+        const parts = text.split(' ');
+        if (parts.length < 4) {
+            await sendMessage(chatId, '❗ Usage: /add <name> <ip> <port>');
+        } else {
+            const [, name, ip, port] = parts;
+            const projects = await readProjectsData();
+            const newProject = {
+                id: Date.now(),
+                name,
+                ip,
+                port,
+                codeSample: ''
+            };
+            projects.push(newProject);
+            await writeProjectsData(projects);
+            await sendMessage(chatId, `✅ Project "${name}" added successfully!`);
+        }
+    } else if (text.startsWith('/get')) {
+        const parts = text.split(' ');
+        if (parts.length < 2) {
+            await sendMessage(chatId, '❗ Usage: /get <project_name>');
+        } else {
+            const name = parts[1];
+            const projects = await readProjectsData();
+            const project = projects.find(p => p.name.toLowerCase() === name.toLowerCase());
+            if (project) {
+                await sendMessage(chatId, `📡 *${project.name}*\nIP: ${project.ip}\nPort: ${project.port}`, true);
+            } else {
+                await sendMessage(chatId, `❌ Project "${name}" not found.`);
+            }
+        }
+    } else {
+        await sendMessage(chatId, '🤖 Hi! Use:\n/add <name> <ip> <port>\n/get <name>');
+    }
+
+    res.sendStatus(200);
 });
+
+// Web frontend routes
+app.get('/', (req, res) => res.render('home', { error: null }));
 
 app.post('/create-project', async (req, res) => {
     if (req.body.password !== 'anchorlearner') {
@@ -82,7 +146,6 @@ app.post('/update-project/:id', async (req, res) => {
 app.get('/api/project/:name', async (req, res) => {
     const projects = await readProjectsData();
     const project = projects.find(p => p.name.toLowerCase() === req.params.name.toLowerCase());
-    
     if (project) {
         res.json({
             name: project.name,
@@ -98,7 +161,6 @@ app.put('/api/project/:name', async (req, res) => {
     const { ip, port } = req.body;
     let projects = await readProjectsData();
     const index = projects.findIndex(p => p.name.toLowerCase() === req.params.name.toLowerCase());
-    
     if (index !== -1) {
         projects[index] = {
             ...projects[index],
@@ -116,7 +178,20 @@ app.put('/api/project/:name', async (req, res) => {
     }
 });
 
+// Start server
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Server running on port ${PORT}`);
+app.listen(PORT, '0.0.0.0', async () => {
+    console.log(`✅ Server running on port ${PORT}`);
+
+    // Set Telegram webhook
+    try {
+        const webhookRes = await axios.get(`${TELEGRAM_API}/setWebhook?url=${WEBHOOK_URL}`);
+        if (webhookRes.data.ok) {
+            console.log('✅ Telegram webhook set successfully!');
+        } else {
+            console.error('❌ Failed to set webhook:', webhookRes.data);
+        }
+    } catch (err) {
+        console.error('Error setting webhook:', err.message);
+    }
 });
