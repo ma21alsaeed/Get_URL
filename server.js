@@ -15,27 +15,26 @@ const WEBHOOK_URL = 'https://get-url-o0dy.onrender.com/bot';
 
 const PROJECTS_FILE = path.join(__dirname, 'projects.json');
 
-// Read data
+// Helpers to read/write project data
 async function readProjectsData() {
     try {
         const data = await fs.readFile(PROJECTS_FILE, 'utf8');
         return JSON.parse(data || '[]');
     } catch (error) {
-        console.error('Error reading data:', error);
+        console.error('❌ Error reading data:', error);
         return [];
     }
 }
 
-// Write data
 async function writeProjectsData(data) {
     try {
         await fs.writeFile(PROJECTS_FILE, JSON.stringify(data, null, 2));
     } catch (error) {
-        console.error('Error writing data:', error);
+        console.error('❌ Error writing data:', error);
     }
 }
 
-// Telegram helper to send messages
+// Telegram message sender
 async function sendMessage(chatId, text, markdown = false) {
     try {
         await axios.post(`${TELEGRAM_API}/sendMessage`, {
@@ -44,55 +43,65 @@ async function sendMessage(chatId, text, markdown = false) {
             parse_mode: markdown ? 'Markdown' : undefined
         });
     } catch (err) {
-        console.error('Telegram sendMessage error:', err.message);
+        console.error('❌ Telegram sendMessage error:', err.message);
     }
 }
 
-// Telegram webhook handler
+// 🧠 Telegram webhook handler with debug logs
 app.post('/bot', async (req, res) => {
-    const message = req.body.message;
-    if (!message || !message.text) return res.sendStatus(200);
+    console.log('🐞 Telegram webhook received:', JSON.stringify(req.body, null, 2));
 
-    const chatId = message.chat.id;
-    const text = message.text.trim();
-
-    if (text.startsWith('/add')) {
-        const parts = text.split(' ');
-        if (parts.length < 4) {
-            await sendMessage(chatId, '❗ Usage: /add <name> <ip> <port>');
-        } else {
-            const [, name, ip, port] = parts;
-            const projects = await readProjectsData();
-            const newProject = {
-                id: Date.now(),
-                name,
-                ip,
-                port,
-                codeSample: ''
-            };
-            projects.push(newProject);
-            await writeProjectsData(projects);
-            await sendMessage(chatId, `✅ Project "${name}" added successfully!`);
+    try {
+        const message = req.body.message;
+        if (!message || !message.text) {
+            console.log('⚠️ No text message received');
+            return res.sendStatus(200);
         }
-    } else if (text.startsWith('/get')) {
-        const parts = text.split(' ');
-        if (parts.length < 2) {
-            await sendMessage(chatId, '❗ Usage: /get <project_name>');
-        } else {
-            const name = parts[1];
-            const projects = await readProjectsData();
-            const project = projects.find(p => p.name.toLowerCase() === name.toLowerCase());
-            if (project) {
-                await sendMessage(chatId, `📡 *${project.name}*\nIP: ${project.ip}\nPort: ${project.port}`, true);
+
+        const chatId = message.chat.id;
+        const text = message.text.trim();
+
+        if (text.startsWith('/add')) {
+            const parts = text.split(' ');
+            if (parts.length < 4) {
+                await sendMessage(chatId, '❗ Usage: /add <name> <ip> <port>');
             } else {
-                await sendMessage(chatId, `❌ Project "${name}" not found.`);
+                const [, name, ip, port] = parts;
+                const projects = await readProjectsData();
+                const newProject = {
+                    id: Date.now(),
+                    name,
+                    ip,
+                    port,
+                    codeSample: ''
+                };
+                projects.push(newProject);
+                await writeProjectsData(projects);
+                await sendMessage(chatId, `✅ Project "${name}" added successfully!`);
             }
+        } else if (text.startsWith('/get')) {
+            const parts = text.split(' ');
+            if (parts.length < 2) {
+                await sendMessage(chatId, '❗ Usage: /get <project_name>');
+            } else {
+                const name = parts[1];
+                const projects = await readProjectsData();
+                const project = projects.find(p => p.name.toLowerCase() === name.toLowerCase());
+                if (project) {
+                    await sendMessage(chatId, `📡 *${project.name}*\nIP: ${project.ip}\nPort: ${project.port}`, true);
+                } else {
+                    await sendMessage(chatId, `❌ Project "${name}" not found.`);
+                }
+            }
+        } else {
+            await sendMessage(chatId, '🤖 Hi! Use:\n/add <name> <ip> <port>\n/get <name>');
         }
-    } else {
-        await sendMessage(chatId, '🤖 Hi! Use:\n/add <name> <ip> <port>\n/get <name>');
-    }
 
-    res.sendStatus(200);
+        res.sendStatus(200);
+    } catch (err) {
+        console.error('🔥 Error handling Telegram webhook:', err.message);
+        res.sendStatus(200); // always respond 200 so Telegram stops retrying
+    }
 });
 
 // Web frontend routes
@@ -156,10 +165,6 @@ app.get('/api/project/:name', async (req, res) => {
         res.status(404).json({ error: 'Project not found' });
     }
 });
-app.post('/debug', (req, res) => {
-    console.log('BODY:', req.body);
-    res.sendStatus(200);
-});
 
 app.put('/api/project/:name', async (req, res) => {
     const { ip, port } = req.body;
@@ -182,7 +187,13 @@ app.put('/api/project/:name', async (req, res) => {
     }
 });
 
-// Start server
+// Debug POST to check payloads
+app.post('/debug', (req, res) => {
+    console.log('🛠️ DEBUG BODY:', req.body);
+    res.sendStatus(200);
+});
+
+// Start server and set webhook
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, '0.0.0.0', async () => {
     console.log(`✅ Server running on port ${PORT}`);
@@ -196,6 +207,6 @@ app.listen(PORT, '0.0.0.0', async () => {
             console.error('❌ Failed to set webhook:', webhookRes.data);
         }
     } catch (err) {
-        console.error('Error setting webhook:', err.message);
+        console.error('❌ Error setting webhook:', err.message);
     }
 });
