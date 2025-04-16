@@ -46,65 +46,42 @@ async function getPinnedProjects() {
 }
 
 // Overwrite pinned message with updated project list
+// Overwrite pinned message with updated project list
 async function updatePinnedProjects(projects) {
     try {
-        await axios.post(`${TELEGRAM_API}/sendMessage`, {
-            chat_id: GROUP_CHAT_ID,
-            text: JSON.stringify(projects, null, 2),
-            disable_notification: true
+        // First: Get the current pinned message ID
+        const chatRes = await axios.get(`${TELEGRAM_API}/getChat`, {
+            params: { chat_id: GROUP_CHAT_ID }
         });
+
+        const pinnedMessageId = chatRes.data.result.pinned_message?.message_id;
+
+        if (pinnedMessageId) {
+            // Edit the pinned message
+            await axios.post(`${TELEGRAM_API}/editMessageText`, {
+                chat_id: GROUP_CHAT_ID,
+                message_id: pinnedMessageId,
+                text: JSON.stringify(projects, null, 2)
+            });
+        } else {
+            // No pinned message exists — send and pin a new one
+            const newMsg = await axios.post(`${TELEGRAM_API}/sendMessage`, {
+                chat_id: GROUP_CHAT_ID,
+                text: JSON.stringify(projects, null, 2),
+                disable_notification: true
+            });
+
+            // Pin the new message
+            await axios.post(`${TELEGRAM_API}/pinChatMessage`, {
+                chat_id: GROUP_CHAT_ID,
+                message_id: newMsg.data.result.message_id
+            });
+        }
     } catch (error) {
         console.error('❌ Failed to update pinned message:', error.message);
     }
 }
 
-// Telegram webhook handler
-app.post('/bot', async (req, res) => {
-    console.log('🐞 Telegram webhook received:', JSON.stringify(req.body, null, 2));
-
-    try {
-        const message = req.body.message;
-        if (!message || !message.text) return res.sendStatus(200);
-
-        const chatId = message.chat.id;
-        const text = message.text.trim();
-
-        if (text.startsWith('/add')) {
-            const parts = text.split(' ');
-            if (parts.length < 4) {
-                await sendMessage(chatId, '❗ Usage: /add <name> <ip> <port>');
-            } else {
-                const [, name, ip, port] = parts;
-                const projects = await getPinnedProjects();
-                const newProject = { id: Date.now(), name, ip, port };
-                projects.push(newProject);
-                await updatePinnedProjects(projects);
-                await sendMessage(chatId, `✅ Project "${name}" added.`);
-            }
-        } else if (text.startsWith('/get')) {
-            const parts = text.split(' ');
-            if (parts.length < 2) {
-                await sendMessage(chatId, '❗ Usage: /get <project_name>');
-            } else {
-                const name = parts[1];
-                const projects = await getPinnedProjects();
-                const project = projects.find(p => p.name.toLowerCase() === name.toLowerCase());
-                if (project) {
-                    await sendMessage(chatId, `📡 *${project.name}*\nIP: ${project.ip}\nPort: ${project.port}`, true);
-                } else {
-                    await sendMessage(chatId, `❌ Project "${name}" not found.`);
-                }
-            }
-        } else {
-            await sendMessage(chatId, '🤖 Hi! Use:\n/add <name> <ip> <port>\n/get <name>');
-        }
-
-        res.sendStatus(200);
-    } catch (err) {
-        console.error('🔥 Error in bot handler:', err.message);
-        res.sendStatus(200);
-    }
-});
 
 // Debug route
 app.post('/debug', (req, res) => {
