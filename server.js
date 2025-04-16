@@ -28,18 +28,17 @@ async function sendMessage(chatId, text, markdown = false) {
 }
 
 // Fetch pinned message JSON data
+// Fetch pinned message JSON data
 async function getPinnedProjects() {
     try {
         const res = await axios.get(`${TELEGRAM_API}/getChat`, {
             params: { chat_id: GROUP_CHAT_ID }
         });
-        const pinnedId = res.data.result.pinned_message?.message_id;
-        if (!pinnedId) return [];
 
-        const pinnedRes = await axios.get(`${TELEGRAM_API}/getChatMessage`, {
-            params: { chat_id: GROUP_CHAT_ID, message_id: pinnedId }
-        });
-        return JSON.parse(pinnedRes.data.result.text || '[]');
+        const pinnedText = res.data.result.pinned_message?.text;
+        if (!pinnedText) return [];
+
+        return JSON.parse(pinnedText || '[]');
     } catch (error) {
         console.error('❌ Error fetching pinned projects:', error.message);
         return [];
