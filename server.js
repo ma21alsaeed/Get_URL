@@ -10,25 +10,56 @@ app.use(bodyParser.json());
 
 const PROJECTS_FILE = path.join(__dirname, 'projects.json');
 
-// Function to read data
+// Initialize projects file if it doesn't exist
+async function initializeProjectsFile() {
+    try {
+        await fs.access(PROJECTS_FILE);
+    } catch (error) {
+        // File doesn't exist, create it with default empty array
+        await fs.writeFile(PROJECTS_FILE, '[]');
+    }
+}
+
+// Function to read data with backup
 async function readProjectsData() {
     try {
+        await initializeProjectsFile();
         const data = await fs.readFile(PROJECTS_FILE, 'utf8');
         return JSON.parse(data || '[]');
     } catch (error) {
         console.error('Error reading data:', error);
-        return [];
+        // Try to recover from backup if main file is corrupted
+        try {
+            const backup = await fs.readFile(`${PROJECTS_FILE}.backup`, 'utf8');
+            await fs.writeFile(PROJECTS_FILE, backup);
+            return JSON.parse(backup || '[]');
+        } catch (backupError) {
+            return [];
+        }
     }
 }
 
-// Function to write data
+// Function to write data with backup
 async function writeProjectsData(data) {
     try {
-        await fs.writeFile(PROJECTS_FILE, JSON.stringify(data, null, 2));
+        const jsonData = JSON.stringify(data, null, 2);
+        // Create backup before writing
+        try {
+            await fs.copyFile(PROJECTS_FILE, `${PROJECTS_FILE}.backup`);
+        } catch (backupError) {
+            console.error('Backup creation failed:', backupError);
+        }
+        await fs.writeFile(PROJECTS_FILE, jsonData);
     } catch (error) {
         console.error('Error writing data:', error);
     }
 }
+
+// Initialize file when server starts
+app.listen(PORT, '0.0.0.0', async () => {
+    await initializeProjectsFile();
+    console.log(`Server running on port ${PORT}`);
+});
 
 app.get('/', (req, res) => {
     res.render('home', { error: null });
