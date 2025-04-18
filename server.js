@@ -1,107 +1,168 @@
+require('dotenv').config();
 const express = require('express');
-const bodyParser = require('body-parser');
-const fs = require('fs').promises;
+const { Dropbox } = require('dropbox');
 const path = require('path');
-const axios = require('axios');
+const bodyParser = require('body-parser');
+const crypto = require('crypto');
 
 const app = express();
-app.set('view engine', 'ejs');
-app.use(bodyParser.urlencoded({ extended: true }));
-app.use(bodyParser.json());
 
-const TELEGRAM_TOKEN = '7742484652:AAEUJBUh0BM93n_IfPY1VcCXq27TL9HUMBc';
-const TELEGRAM_API = `https://api.telegram.org/bot${TELEGRAM_TOKEN}`;
-const WEBHOOK_URL = 'https://get-url-o0dy.onrender.com/bot';
-const GROUP_CHAT_ID = -1002392864802;
-
-// Telegram message sender
-async function sendMessage(chatId, text, markdown = false) {
-    try {
-        await axios.post(`${TELEGRAM_API}/sendMessage`, {
-            chat_id: chatId,
-            text,
-            parse_mode: markdown ? 'Markdown' : undefined
-        });
-    } catch (err) {
-        console.error('❌ Telegram sendMessage error:', err.message);
-    }
-}
-
-// Fetch pinned message JSON data
-// Fetch pinned message JSON data
-async function getPinnedProjects() {
-    try {
-        const res = await axios.get(`${TELEGRAM_API}/getChat`, {
-            params: { chat_id: GROUP_CHAT_ID }
-        });
-
-        const pinnedText = res.data.result.pinned_message?.text;
-        if (!pinnedText) return [];
-
-        return JSON.parse(pinnedText || '[]');
-    } catch (error) {
-        console.error('❌ Error fetching pinned projects:', error.message);
-        return [];
-    }
-}
-
-// Overwrite pinned message with updated project list
-// Overwrite pinned message with updated project list
-async function updatePinnedProjects(projects) {
-    try {
-        // First: Get the current pinned message ID
-        const chatRes = await axios.get(`${TELEGRAM_API}/getChat`, {
-            params: { chat_id: GROUP_CHAT_ID }
-        });
-
-        const pinnedMessageId = chatRes.data.result.pinned_message?.message_id;
-
-        if (pinnedMessageId) {
-            // Edit the pinned message
-            await axios.post(`${TELEGRAM_API}/editMessageText`, {
-                chat_id: GROUP_CHAT_ID,
-                message_id: pinnedMessageId,
-                text: JSON.stringify(projects, null, 2)
-            });
-        } else {
-            // No pinned message exists — send and pin a new one
-            const newMsg = await axios.post(`${TELEGRAM_API}/sendMessage`, {
-                chat_id: GROUP_CHAT_ID,
-                text: JSON.stringify(projects, null, 2),
-                disable_notification: true
-            });
-
-            // Pin the new message
-            await axios.post(`${TELEGRAM_API}/pinChatMessage`, {
-                chat_id: GROUP_CHAT_ID,
-                message_id: newMsg.data.result.message_id
-            });
-        }
-    } catch (error) {
-        console.error('❌ Failed to update pinned message:', error.message);
-    }
-}
-
-
-// Debug route
-app.post('/debug', (req, res) => {
-    console.log('🛠️ DEBUG BODY:', req.body);
-    res.sendStatus(200);
+// Dropbox configuration
+const dbx = new Dropbox({
+  accessToken: process.env.DROPBOX_ACCESS_TOKEN,
+  clientId: process.env.DROPBOX_APP_KEY,
+  clientSecret: process.env.DROPBOX_APP_SECRET
 });
 
-// Start server and set webhook
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, '0.0.0.0', async () => {
-    console.log(`✅ Server running on port ${PORT}`);
+const PROJECTS_FILE = '/projects.json';
 
-    try {
-        const webhookRes = await axios.get(`${TELEGRAM_API}/setWebhook?url=${WEBHOOK_URL}`);
-        if (webhookRes.data.ok) {
-            console.log('✅ Telegram webhook set successfully!');
-        } else {
-            console.error('❌ Failed to set webhook:', webhookRes.data);
-        }
-    } catch (err) {
-        console.error('❌ Error setting webhook:', err.message);
+// Middleware
+app.set('view engine', 'ejs');
+app.set('views', path.join(__dirname, 'views'));
+app.use(bodyParser.urlencoded({ extended: true }));
+app.use(express.static('public'));
+
+// Initialize projects file if it doesn't exist
+async function initializeProjectsFile() {
+  try {
+    await dbx.filesDownload({ path: PROJECTS_FILE });
+  } catch (error) {
+    if (error.status === 409) { // Not found error
+      await dbx.filesUpload({
+        path: PROJECTS_FILE,
+        contents: JSON.stringify([]),
+        mode: { '.tag': 'overwrite' }
+      });
+      console.log('Created new projects file on Dropbox');
     }
+  }
+}
+
+// Helper functions for projects
+async function getProjects() {
+  try {
+    const response = await dbx.filesDownload({ path: PROJECTS_FILE });
+    return JSON.parse(response.result.fileBinary.toString());
+  } catch (error) {
+    console.error('Error reading projects:', error);
+    return [];
+  }
+}
+
+async function saveProjects(projects) {
+  try {
+    await dbx.filesUpload({
+      path: PROJECTS_FILE,
+      contents: JSON.stringify(projects, null, 2),
+      mode: { '.tag': 'overwrite' }
+    });
+  } catch (error) {
+    console.error('Error saving projects:', error);
+    throw error;
+  }
+}
+
+// Routes
+app.get('/', async (req, res) => {
+  res.render('home', { error: null });
+});
+
+app.get('/find-project', async (req, res) => {
+  const projectName = req.query.projectName;
+  const projects = await getProjects();
+  const project = projects.find(p => p.name === projectName);
+
+  if (project) {
+    res.render('project', { projects: [project] });
+  } else {
+    res.render('not-found');
+  }
+});
+
+app.post('/create-project', async (req, res) => {
+  const { projectName, password } = req.body;
+  const projects = await getProjects();
+
+  if (projects.some(p => p.name === projectName)) {
+    return res.render('home', { error: 'Project name already exists' });
+  }
+
+  const newProject = {
+    id: crypto.randomBytes(16).toString('hex'),
+    name: projectName,
+    password: crypto.createHash('sha256').update(password).digest('hex'),
+    ip: '',
+    port: '',
+    codeSample: '',
+    createdAt: new Date().toISOString()
+  };
+
+  projects.push(newProject);
+  await saveProjects(projects);
+
+  res.render('project', { projects: [newProject] });
+});
+
+app.post('/update-project/:id', async (req, res) => {
+  const { id } = req.params;
+  const { ip, port, codeSample } = req.body;
+  const projects = await getProjects();
+  const projectIndex = projects.findIndex(p => p.id === id);
+
+  if (projectIndex === -1) {
+    return res.render('error', { message: 'Project not found' });
+  }
+
+  projects[projectIndex] = {
+    ...projects[projectIndex],
+    ip,
+    port,
+    codeSample
+  };
+
+  await saveProjects(projects);
+  res.render('project', { projects: [projects[projectIndex]] });
+});
+
+app.post('/delete-project/:id', async (req, res) => {
+  const { id } = req.params;
+  const projects = await getProjects();
+  const filteredProjects = projects.filter(p => p.id !== id);
+
+  if (projects.length === filteredProjects.length) {
+    return res.render('error', { message: 'Project not found' });
+  }
+
+  await saveProjects(filteredProjects);
+  res.redirect('/');
+});
+
+// API Routes
+app.get('/api/project/:name', async (req, res) => {
+  const projects = await getProjects();
+  const project = projects.find(p => p.name === req.params.name);
+
+  if (project) {
+    res.json({
+      name: project.name,
+      ip: project.ip,
+      port: project.port,
+      codeSample: project.codeSample
+    });
+  } else {
+    res.status(404).json({ error: 'Project not found' });
+  }
+});
+
+// Error handling
+app.use((err, req, res, next) => {
+  console.error(err.stack);
+  res.status(500).render('error', { message: 'Something went wrong!' });
+});
+
+// Start server
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, async () => {
+  await initializeProjectsFile();
+
 });
