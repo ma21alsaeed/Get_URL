@@ -25,11 +25,27 @@
             font-size: 0.9em;
             margin-top: 5px;
         }
+        .navigation {
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+        }
     </style>
+    <script>
+        function copyApiUrl(projectName) {
+            const apiUrl = `${window.location.origin}/api/project/${projectName}`;
+            navigator.clipboard.writeText(apiUrl)
+                .then(() => alert('API URL copied to clipboard!'))
+                .catch(err => console.error('Failed to copy: ', err));
+        }
+    </script>
 </head>
 <body>
-    <h1>Projects</h1>
-    <a href="/"><button>Create New Project</button></a>
+    <div class="navigation">
+        <a href="/"><button>Home</button></a>
+        <h1>Project Details</h1>
+        <div></div> <!-- Empty div for spacing -->
+    </div>
     
     <% projects.forEach(function(project) { %>
         <div class="project">
