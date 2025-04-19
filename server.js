@@ -9,10 +9,12 @@ const app = express();
 
 // Dropbox configuration
 const dbx = new Dropbox({
-  accessToken: process.env.DROPBOX_ACCESS_TOKEN,
+  //accessToken: process.env.DROPBOX_ACCESS_TOKEN, // Optional (will be updated)
+  refreshToken: process.env.DROPBOX_REFRESH_TOKEN,
   clientId: process.env.DROPBOX_APP_KEY,
   clientSecret: process.env.DROPBOX_APP_SECRET
 });
+
 
 const PROJECTS_FILE = '/projects.json';
 
@@ -158,6 +160,35 @@ app.get('/api/project/:name', async (req, res) => {
 app.use((err, req, res, next) => {
   console.error(err.stack);
   res.status(500).render('error', { message: 'Something went wrong!' });
+});
+
+const axios = require('axios');
+
+app.get('/redirect', async (req, res) => {
+  const code = req.query.code;
+
+  if (!code) return res.status(400).send('Missing code');
+
+  try {
+    const response = await axios.post('https://api.dropbox.com/oauth2/token', null, {
+      params: {
+        code,
+        grant_type: '7xbQ1bhSEwsAAAAAAAAAFn4Os67xTvJd1WBNSnStaVs',
+        client_id: '7eyr8lhfhnv8pqx',
+        client_secret: 'lwfwcgjxxphoh84',
+        redirect_uri: 'https://get-url-o0dy.onrender.com/redirect'
+      },
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded'
+      }
+    });
+
+    console.log('Refresh token:', response.data.refresh_token);
+    res.send('✅ Success! Check server logs for refresh token');
+  } catch (err) {
+    console.error('Token exchange failed:', err.response?.data || err.message);
+    res.status(500).send('Failed to exchange code for token');
+  }
 });
 
 // Start server
