@@ -57,11 +57,19 @@
             <form action="/update-project/<%= project.id %>" method="POST">
                 <div class="form-group">
                     <label>IP:</label>
-                    <input type="text" name="ip" value="<%= project.ip %>">
+                    <input type="text" name="ip1" value="<%= project.ip %>">
                 </div>
                 <div class="form-group">
                     <label>Port:</label>
-                    <input type="text" name="port" value="<%= project.port %>">
+                    <input type="text" name="port1" value="<%= project.port %>">
+                </div>
+                <div class="form-group">
+                    <label>IP:</label>
+                    <input type="text" name="ip2" value="<%= project.ip %>">
+                </div>
+                <div class="form-group">
+                    <label>Port:</label>
+                    <input type="text" name="port2" value="<%= project.port %>">
                 </div>
                 <div class="form-group">
                     <label>Code Sample:</label>

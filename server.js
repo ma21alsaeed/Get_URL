@@ -92,8 +92,10 @@ app.post('/create-project', async (req, res) => {
     id: crypto.randomBytes(16).toString('hex'),
     name: projectName,
     password: crypto.createHash('sha256').update(password).digest('hex'),
-    ip: '',
-    port: '',
+    ip1: '',
+    ip2:'',
+    port1: '',
+    port2:'',
     codeSample: '',
     createdAt: new Date().toISOString()
   };
@@ -106,7 +108,7 @@ app.post('/create-project', async (req, res) => {
 
 app.post('/update-project/:id', async (req, res) => {
   const { id } = req.params;
-  const { ip, port, codeSample } = req.body;
+  const { ip1, port1,ip2,port2 ,codeSample } = req.body;
   const projects = await getProjects();
   const projectIndex = projects.findIndex(p => p.id === id);
 
@@ -116,8 +118,10 @@ app.post('/update-project/:id', async (req, res) => {
 
   projects[projectIndex] = {
     ...projects[projectIndex],
-    ip,
-    port,
+    ip1,
+    port1,
+    ip2,
+    port2,
     codeSample
   };
 
@@ -146,8 +150,10 @@ app.get('/api/project/:name', async (req, res) => {
   if (project) {
     res.json({
       name: project.name,
-      ip: project.ip,
-      port: project.port,
+      ip1: project.ip1,
+      ip2: project.ip2,
+      port1: project.port1,
+      port2: project.port2,
       codeSample: project.codeSample
     });
   } else {
@@ -171,8 +177,8 @@ app.get('/redirect', async (req, res) => {
       params: {
         code: code, // ✅ Use the correct code from the URL
         grant_type: 'authorization_code', // ✅ Correct grant type
-        client_id: '7eyr8lhfhnv8pqx',
-        client_secret: 'lwfwcgjxxphoh84',
+        client_id: process.env.DROPBOX_APP_KEY,
+        client_secret: process.env.DROPBOX_APP_SECRET,
         redirect_uri: 'https://get-url-o0dy.onrender.com/redirect'
       },
       headers: {
